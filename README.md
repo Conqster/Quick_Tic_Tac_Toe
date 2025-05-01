@@ -3,10 +3,13 @@
 ## Summary
 A quick prototype of a Tic-Tac-Toe game, utilising Bitwise operation for low-level optimisation and resolving game outcome. 
 
+### Input Representation
+Each cell in the Tic-Tac-Toe grid is assigned a uniques binary flag:
 
-/*
-         Each cell in the Tic-Tac-Toe grid is assigned a uniques binary flag:
-         input set
+```
+n = individual grid cell { 0 > n < 8 }
+conversion = 2 ^ (8 - n).
+
          0 = 100000000 = 256
          1 = 010000000 = 128
          2 = 001000000 = 64
@@ -16,12 +19,13 @@ A quick prototype of a Tic-Tac-Toe game, utilising Bitwise operation for low-lev
          6 = 000000100 = 4
          7 = 000000010 = 2
          8 = 000000001 = 1
-         */
-        //2 ^ (8 - n)
 
+```
 
+### Win Conditions
+Winning patterns are precomputed using bitwise masks for efficient evaluation:
 
-        /*
+```
             possible wins
             x   x   x
             o   o   o
@@ -33,7 +37,6 @@ A quick prototype of a Tic-Tac-Toe game, utilising Bitwise operation for low-lev
             x   o   o
             x   o   o
             x   o   o
-
             outcome: x o o x o o x o o = 292
             o x o o x o o x o = 146
             o o x o o x o o x = 73
@@ -43,9 +46,9 @@ A quick prototype of a Tic-Tac-Toe game, utilising Bitwise operation for low-lev
             o   o   x
             outcome: x o o o x o o o x = 273
             o o x o x o x o o = 84
-         */
 
-        int[] win_masks = { 448, 56, 7, 292, 146, 73, 273, 84 }; // win maska
+
+        int[] win_masks = { 448, 56, 7, 292, 146, 73, 273, 84 }; // win masks
         int curr_player_slot = (curr_player == 0) ? m_Player0Slot : m_Player1Slot;
         for (int i = 0;i < win_masks.Length;i++)
         {
@@ -59,6 +62,9 @@ A quick prototype of a Tic-Tac-Toe game, utilising Bitwise operation for low-lev
                 return win_masks[i];
             }
         }
+```
+
+## Quick Demo
 
 |<a href="https://youtu.be/IluDpkAbcWs"><img src = "Docs/Screenshot.png"/>|
 |:-|
