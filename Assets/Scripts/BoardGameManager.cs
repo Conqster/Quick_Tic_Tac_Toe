@@ -41,7 +41,7 @@ public class BoardGameManager : MonoBehaviour
     outcome: x o o o x o o o x
     o o x o x o x o o
  */
-    [SerializeField] private int[] m_CurrGameState = new int[3*3];
+
     [SerializeField] private int m_Player0Slot = 0;
     [SerializeField] private int m_Player1Slot = 0;
     [SerializeField] private int m_CachePatternOutput = 0;
@@ -62,9 +62,6 @@ public class BoardGameManager : MonoBehaviour
     [SerializeField] private int m_PrevClosestGrid;
     private void Awake()
     {
-        for(int i = 0; i < 9; i++)
-            m_CurrGameState[i] = -1;
-
         for (int i = 0; i < m_CachePatternOutputGridIdxs.Length; i++)
             m_CachePatternOutputGridIdxs[i] = -1;
     }
@@ -124,10 +121,6 @@ public class BoardGameManager : MonoBehaviour
 
         yield return new WaitForSeconds(m_GameResetDelay);
         m_NextObjectCreationSlot = 0;
-        for (int i = 0; i < 9; i++)
-        {
-            m_CurrGameState[i] = -1;
-        }
         m_Player0Slot = 0;
         m_Player1Slot = 0;
         for (int i = 0; i < m_TrackObjectCreation.Length; i++)
@@ -152,16 +145,7 @@ public class BoardGameManager : MonoBehaviour
 
     private int CheckGameOverAndReturnPattern(int curr_player)
     {
-        bool complete = (m_NextObjectCreationSlot >= 9);
-
-
-        if (complete)
-        {
-           // ResetGame();
-            m_ResetGame = true;
-            return 0;
-        }
-
+        bool complete = false;
         /*
          input set
          0 = 100000000 = 256
@@ -210,12 +194,20 @@ public class BoardGameManager : MonoBehaviour
             //early out and output
             if(complete)
             {
-                //ResetGame();
                 m_WinningPlayerIdx = curr_player;
                 m_ResetGame = true;
                 return win_masks[i];
             }
         }
+
+        complete |= (m_NextObjectCreationSlot >= 9);
+
+        if (complete)
+        {
+            m_ResetGame = true;
+            return 0;
+        }
+
 
         return 0;
     }
@@ -223,8 +215,7 @@ public class BoardGameManager : MonoBehaviour
 
     private void UpdateAndVisualisePieces(int player_idx, int piece_slot, Vector2 point)
     {
-        Debug.Assert(m_CurrGameState[piece_slot] == -1, "Board slot has already been assign to during this game!!!");
-        m_CurrGameState[piece_slot] = player_idx;
+        Debug.Assert(!m_Board.GetGridCellFlagState(piece_slot), "Board slot has already been assign to during this game!!!");
         if(player_idx == 0)
         {
             //2 ^ (8 - n)

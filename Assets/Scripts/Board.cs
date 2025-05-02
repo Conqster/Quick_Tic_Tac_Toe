@@ -19,7 +19,7 @@ public class Board : MonoBehaviour
         get { return (m_Width / 3.0f) * 0.5f; }
     }
 
-    [SerializeField] private bool[] m_GridCoordState = new bool[3*3];
+    [SerializeField] private int m_GridCellState = 0;
 
 
     [Space]
@@ -32,23 +32,18 @@ public class Board : MonoBehaviour
     [SerializeField] private bool m_DebugShow = true;
     [SerializeField] private Color m_GridAvailableColour = Color.green;
     [SerializeField] private Color m_GridNotAvailableColour = Color.red;
-    // Start is called before the first frame update
-    void Start()
-    {
-        
-    }
-
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
 
 
     public void ResetBoard()
     {
-        for(int i = 0; i < m_GridCoordState.Length; i++)
-            m_GridCoordState[i] = false;
+        m_GridCellState = 0;
+    }
+
+
+    public bool GetGridCellFlagState(int idx)
+    {
+        int cell_flag = (int)Mathf.Pow(2, 8 - idx);
+        return ((cell_flag &= m_GridCellState) != 0);
     }
 
 
@@ -59,14 +54,30 @@ public class Board : MonoBehaviour
             Debug.Log("Out of bound!!!!!");
             return false;
         }
-        //check its current state 
-        if (m_GridCoordState[idx])
+
+        //check current flag
+        /*
+         input set
+         0 = 100000000 = 256
+         1 = 010000000 = 128
+         2 = 001000000 = 64
+         3 = 000100000 = 32
+         4 = 000010000 = 16
+         5 = 000001000 = 8
+         6 = 000000100 = 4
+         7 = 000000010 = 2
+         8 = 000000001 = 1
+         */
+        //2 ^ (8 - n)
+
+        int cell_flag = (int)Mathf.Pow(2, 8 - idx);
+        int curr_state = m_GridCellState & cell_flag;
+        if (curr_state == cell_flag)
         {
             Debug.Log("Unable to use grid already in use");
             return false;
         }
-
-        m_GridCoordState[idx] = true;
+        m_GridCellState += cell_flag;
 
         return true;
     }
@@ -181,7 +192,7 @@ public class Board : MonoBehaviour
 
         for(int i = 0; i < 9; i++)
         {
-            Gizmos.color = m_GridCoordState[i] ? m_GridNotAvailableColour : m_GridAvailableColour;
+            Gizmos.color = GetGridCellFlagState(i) ? m_GridNotAvailableColour : m_GridAvailableColour;
             Gizmos.DrawSphere(m_CacheGridCoords[i], 0.2f);
         }
 
