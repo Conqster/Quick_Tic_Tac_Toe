@@ -46,6 +46,29 @@ public class Board : MonoBehaviour
         return ((cell_flag &= m_GridCellState) != 0);
     }
 
+    public void RemoveCellFlagStateByIdx(int flag_idx)
+    {
+        int flag_mask = (int)Mathf.Pow(2, 8 - flag_idx);
+        if((flag_mask & m_GridCellState) == flag_mask)
+        {
+            Debug.Log("Flag was set for" + flag_mask + "idx: " + flag_idx + " removing.");
+            m_GridCellState ^= flag_mask;
+        }
+        else
+            Debug.Log("Flag was not set for" + flag_mask + "idx: " + flag_idx + " unsucessful.");
+    }
+
+    public void RemoveCellFlagStateWithBinaryMask(int flag_mask)
+    {
+        if ((flag_mask & m_GridCellState) == flag_mask)
+        {
+            Debug.Log("Flag was set for" + flag_mask + " removing.");
+            m_GridCellState ^= flag_mask;
+        }
+        else
+            Debug.Log("Flag was not set for" + flag_mask + " unsucessful.");
+    }
+
 
     public bool UseGridCoord(int idx)
     {

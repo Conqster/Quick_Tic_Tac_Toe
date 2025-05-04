@@ -2,6 +2,7 @@ using Microsoft.Unity.VisualStudio.Editor;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.ComponentModel;
 using TMPro;
 using UnityEngine;
 
@@ -42,24 +43,40 @@ public class BoardGameManager : MonoBehaviour
     o o x o x o x o o
  */
 
+    [Space]
+    [Header("Game Parameter/Utilities")]
     [SerializeField] private int m_Player0Slot = 0;
     [SerializeField] private int m_Player1Slot = 0;
     [SerializeField] private int m_CachePatternOutput = 0;
     [SerializeField] private int[] m_CachePatternOutputGridIdxs = new int[2];
-
     [SerializeField] private bool m_ResetGame = false;
-
     [SerializeField, Range(0.1f, 5.0f)] private float m_GameResetDelay = 2.0f;
-    [SerializeField] private int m_WinningPlayerIdx = 0;
-    [SerializeField] private TextMeshProUGUI m_TextMeshProUGUI;
+    //bytes can only store up to 255 by there are 8 cell (256) 
+    //so store each less than one, and when need at one to use
+    //fisrt element 0 tracks the current slot/cell to write to
+    [SerializeField] private Stack<byte>m_GameplayPiecePlacement = new Stack<byte>();
 
+    [Space]
+    [Header("Gameplay Parameters/Utilities")]
+    [SerializeField] private int m_WinningPlayerIdx = 0;
+    [SerializeField] private int m_Player0Score = 0;
+    [SerializeField] private int m_Player1Score = 0;
+    [SerializeField] private int m_Draws = 0;
+
+    [Space]
+    [Header("UI")]
+    [SerializeField] private TextMeshProUGUI m_TextMeshProUGUI = null;
     [SerializeField] private Transform m_Player1Zone = null;
     [SerializeField] private Transform m_Player2Zone = null;
-    [SerializeField] private TextMeshProUGUI m_PlayerPlyingTMPro;
+    [SerializeField] private TextMeshProUGUI m_PlayerPlayingTMPro;
+    [SerializeField] private TextMeshProUGUI m_Player0ScoreUI = null;
+    [SerializeField] private TextMeshProUGUI m_Player1ScoreUI = null;
+
 
     [Space]
     [Header("Debugging")]
     [SerializeField] private int m_PrevClosestGrid;
+    [SerializeField] private Vector3 m_DebugTouchPos = Vector3.zero;
     private void Awake()
     {
         for (int i = 0; i < m_CachePatternOutputGridIdxs.Length; i++)
@@ -73,17 +90,64 @@ public class BoardGameManager : MonoBehaviour
             m_TextMeshProUGUI.gameObject.SetActive(false);
 
         UpdateGameplayUI(0); // <- quick hack 
+
     }
 
     // Update is called once per frame
     void Update()
     {
-        CheckMouseClick();
 
-        if(m_ResetGame)
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            m_ResetGame = true;
+            //quick hack
+            //to make sure none of the player get scored
+            m_WinningPlayerIdx = -1;
+            m_CachePatternOutput = 0;
+        }
+
+        if(Input.GetKeyDown(KeyCode.Backspace))
+        {
+            int v = GetGameplayLastPiecePlacement();
+            if (v < 0)
+            {
+                Debug.Log("No Piece/Gameplay to rewind.");
+                return;
+            }
+            Debug.Assert(v < 9, "piece idx is outside array bounds");
+            //need to clear player slot
+            int v_mask = (int)Mathf.Pow(2, 8-v);
+            if((v_mask&m_Player0Slot) == v_mask)
+            {
+                //this player owns this slot
+                //clear
+                //
+                //sample
+                //111 100 000  - player
+                //000 100 000  = mask
+
+                //111 000 000   XOR
+                m_Player0Slot ^= v_mask;
+            }
+            //check player 2 as well
+            if ((v_mask & m_Player1Slot) == v_mask)
+                m_Player1Slot ^= v_mask;
+            //clear board assignemnt 
+            m_Board.RemoveCellFlagStateByIdx(v);
+            //m_Board.RemoveCellFlagStateWithBinaryMask(v_mask);
+
+            //clear visuals
+            //quick hack get pos & compare with cached 
+            DestroyLastCreatedPieceVisuals();
+            //prev player because player 
+            NextPlayer();
+        }
+
+        if(!m_ResetGame)
+            CheckMouseClick();
+        else
         {
             StartCoroutine(ResetGame());
-            //ResetGame();
             m_ResetGame = false;
         }
     }
@@ -97,12 +161,18 @@ public class BoardGameManager : MonoBehaviour
     }
 
 
+    private void DestroyLastCreatedPieceVisuals()
+    {
+        Destroy(m_TrackObjectCreation[m_NextObjectCreationSlot - 1]);
+        m_NextObjectCreationSlot--;
+    }
+
     private IEnumerator ResetGame()
     {
+        WinStateUpdateAndUI(m_WinningPlayerIdx);
         //if not 0 there is a winning player
         if(m_CachePatternOutput != 0)
         {
-            WinnerTextUIUpdate(m_WinningPlayerIdx);
             UpdateGameplayUI(m_WinningPlayerIdx); // <- quick hack 
             int highest_bit = m_CachePatternOutput;
             while((highest_bit & (highest_bit - 1)) != 0)
@@ -140,6 +210,7 @@ public class BoardGameManager : MonoBehaviour
         m_CurrPlayerIdx = 0;
         m_TextMeshProUGUI.gameObject.SetActive(false);
         UpdateGameplayUI(0); // <- quick hack 
+        m_GameplayPiecePlacement.Clear(); // <-- quick hack
     }
 
 
@@ -205,6 +276,7 @@ public class BoardGameManager : MonoBehaviour
         if (complete)
         {
             m_ResetGame = true;
+            m_WinningPlayerIdx = -1;
             return 0;
         }
 
@@ -215,7 +287,6 @@ public class BoardGameManager : MonoBehaviour
 
     private void UpdateAndVisualisePieces(int player_idx, int piece_slot, Vector2 point)
     {
-        Debug.Assert(!m_Board.GetGridCellFlagState(piece_slot), "Board slot has already been assign to during this game!!!");
         if(player_idx == 0)
         {
             //2 ^ (8 - n)
@@ -268,9 +339,11 @@ public class BoardGameManager : MonoBehaviour
             //set state
             if(closest > -1)
             {
+                Debug.Assert(!m_Board.GetGridCellFlagState(closest), "Board slot has already been assign to during this game!!!");
                 if (m_Board.UseGridCoord(closest))
                 {
                     UpdateAndVisualisePieces(m_CurrPlayerIdx, closest, m_Board.GetGridCoord(closest));
+                    CacheCellPiecePlayedPlacement(closest);
                     m_CachePatternOutput = CheckGameOverAndReturnPattern(m_CurrPlayerIdx);
                     NextPlayer();
                 }
@@ -284,15 +357,15 @@ public class BoardGameManager : MonoBehaviour
         {
             m_Player1Zone.gameObject.SetActive(true);
             m_Player2Zone.gameObject.SetActive(false);
-            m_PlayerPlyingTMPro.text = "Playing: Player One";
-            m_PlayerPlyingTMPro.color = Color.blue;
+            m_PlayerPlayingTMPro.text = "Playing: Player One";
+            m_PlayerPlayingTMPro.color = Color.blue;
         }
         else if(idx == 1)
         {
             m_Player1Zone.gameObject.SetActive(false);
             m_Player2Zone.gameObject.SetActive(true);
-            m_PlayerPlyingTMPro.text = "Playing: Player Two";
-            m_PlayerPlyingTMPro.color = Color.red;
+            m_PlayerPlayingTMPro.text = "Playing: Player Two";
+            m_PlayerPlayingTMPro.color = Color.red;
         }
     }
 
@@ -305,15 +378,54 @@ public class BoardGameManager : MonoBehaviour
             int idx_b = m_CachePatternOutputGridIdxs[1];
             Debug.DrawLine(m_Board.GetCacheGridCoords[idx_a], m_Board.GetCacheGridCoords[idx_b]);
         }
+
+        Gizmos.color = Color.magenta;
+        Gizmos.DrawSphere(m_DebugTouchPos, 0.2f);
     }
 
 
 
 
-    private void WinnerTextUIUpdate(int idx)
+    private void WinStateUpdateAndUI(int idx)
     {
         m_TextMeshProUGUI.gameObject.SetActive(true);
-        m_TextMeshProUGUI.text = (idx == 0) ? "Player One Wins" : "Player Two Wins";
-        m_TextMeshProUGUI.color = (idx == 0) ? Color.blue : Color.red;
+        if(idx != 0 && idx != 1)
+        {
+            m_TextMeshProUGUI.text = "Draw";
+            m_TextMeshProUGUI.color = Color.blue + Color.red;
+            m_Draws++;
+        }
+        else
+        {
+            m_TextMeshProUGUI.text = (idx == 0) ? "Player One Wins" : "Player Two Wins";
+            m_TextMeshProUGUI.color = (idx == 0) ? Color.blue : Color.red;
+            if (idx == 0)
+            {
+                m_Player0Score++;
+                m_Player0ScoreUI.text = m_Player0Score.ToString();
+            }
+            else if(idx == 1)
+            {
+                m_Player1Score++;
+                m_Player1ScoreUI.text = m_Player1Score.ToString();
+            }
+        }
     }
+
+
+
+    void CacheCellPiecePlayedPlacement(int idx)
+    {
+        //bytes can only store up to 255 by there are 8 cell (256) 
+        //so store each less than one, and when need at one to use
+        m_GameplayPiecePlacement.Push((byte)idx);
+    }
+
+    int GetGameplayLastPiecePlacement()
+    {
+        if (m_GameplayPiecePlacement.Count <= 0)
+            return -1;
+        return (int)m_GameplayPiecePlacement.Pop();
+    }
+
 }
